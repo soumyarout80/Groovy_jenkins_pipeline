@@ -1,0 +1,57 @@
+pipeline {
+  agent { node { label 'ubuntu-build-server' } }
+    stages {
+		stage ('Checkout Scripts') {
+		steps {
+			cleanWs()
+			checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'CloneOption', noTags: true, reference: '', shallow: true, timeout: 60]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'xxxxxxxxxxxxxxxxxxxxx', url: 'https://github.com/soumyarout80/Groovy_jenkins_pipeline.git']]])
+			}
+		}
+		stage ('Ansible Validation') {
+		steps {
+			withCredentials([usernamePassword(credentialsId: 'xxxxxxxxxxxxxxxxxxxxxx', passwordVariable: 'DR_PWD', usernameVariable: 'DR_USN')]) {
+			sh '''echo Ansible validation
+			cd ${WORKSPACE}/infra/src/scripts
+			sudo ansible-playbook -i '127.0.0.1,' ../ansible/test.yml --syntax-check 
+			sudo ansible-playbook -i '127.0.0.1,' ../ansible/test.yml --list-tasks
+			'''
+				}
+			}
+		}		
+		stage ('Python Validation') {
+		steps {
+			withCredentials([usernamePassword(credentialsId: 'xxxxxxxxxxxxx', passwordVariable: 'AF_PWD', usernameVariable: 'AF_USN')]) {
+			sh '''echo python validation with pylint
+			cd ${WORKSPACE}/scripts
+			pylint something.py
+			
+			'''
+				}
+			}
+		}
+		stage ('Terraform Validation') {
+		steps {
+			withCredentials([usernamePassword(credentialsId: 'xxxxxxxxxxxxx', passwordVariable: 'SS_PWD', usernameVariable: 'SS_USN')]) {
+			sh '''echo terraform validation 
+			cd ${WORKSPACE}/test/terraform
+			cp main.tf.phase1 main.tf
+			sudo terraform init
+			sudo terraform validate  
+			cp main.tf.phase2 main.tf
+			sudo terraform init
+			sudo terraform validate  '''
+			
+		}
+	}
+
+	}
+	}	
+    post {
+			success {
+     emailext attachLog: true, body: '''${FILE, path="/var/lib/jenkins/email-template/mail-success-template.html"}''' , subject: "ALERT! [BuildResult][${currentBuild.currentResult}] - Job '${env.JOB_NAME}'  (${env.BUILD_NUMBER})" , to: 'soumyarout80@gmailcom', from: 'soumyarout80@gmailcom', mimeType: 'text/html';
+    }
+	    failure {
+    emailext attachLog: true, body: '''${FILE, path="/var/lib/jenkins/email-template/mail-failure-template.html"}''' , subject: "ALERT! [BuildResult][${currentBuild.currentResult}] - Job '${env.JOB_NAME}'  (${env.BUILD_NUMBER})" , to: 'soumyarout80@gmailcom', from: 'soumyarout80@gmail.com', mimeType: 'text/html';
+    }
+	}
+}
